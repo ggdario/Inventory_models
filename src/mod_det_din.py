@@ -1,3 +1,4 @@
+import numpy as np
 from pulp import *
 
 
@@ -76,5 +77,109 @@ def no_setup_eoq():
     # The optimised objective function value is printed to the screen
     print("Total Cost of Transportation = ", value(prob.objective))
 
+def eoq_setup(x_ini, d_array, k_arr, h_arr):
+    minimos1, z1 = step_1(x_ini, d_array, k_arr[0], h_arr[0])
+
+    mins = []
+    zs = []
+    mins.append(minimos1)
+    zs.append(z1)
+    min_ant = minimos1.copy()
+
+    for i in range(1, len(d_array)-1):
+
+        mini, zi = step_gral(d_array, k_arr[i], h_arr[i], min_ant, i)
+        mins.append(mini)
+        zs.append(zi)
+        min_ant = mini.copy()
+
+    minf, zf = final_step(d_array[-1], k_arr[-1], h_arr[-1], mini)
+    mins.append(minf)
+    zs.append(zf)
+
+    z_optimos = get_results(zs, d_array)
+
+    print(f'Las cantidades optimas son {z_optimos}, con un coste de {minf}')
+
+def get_results(zs, d_arr):
+
+
+    zs = list(reversed(zs))
+    d_arr = list(reversed(d_arr))
+    print(zs[2])
+    xant = 0
+    z = zs[0]
+
+    z_finales = []
+    z_finales.append(z)
+    for i, item in enumerate(d_arr[:-1]):
+        x = xant + item - z
+        z = zs[i+1][x]
+        z_finales.append(z)
+        xant = x
+    return list(reversed(z_finales))
+def coste(z, k):
+
+    if z == 0:
+        c = 0
+    elif z <= 3:
+        c = 10*z + k
+    else:
+        c = 30 + 20*(z-3) + k
+    return c
+
+def step_1(x_ini, d_array, k, h):
+
+    x = np.arange(sum(d_array[1:]) + 1)
+    hx = h * x
+    z = x + d_array[0] - x_ini
+
+    c = np.array(list([coste(i, k) for i in z]))
+    ct = c + hx
+
+    minimos1 = ct.copy()
+
+    return(minimos1, z)
+
+def step_gral(d_array, k, h, minimos, i):
+
+    x = np.arange(sum(d_array[i+1:]) + 1)
+    hx = h * x
+    z = np.arange(max(x) + d_array[i] +1)
+    c = np.array(list([coste(i, k) for i in z]))
+
+    ct = np.full((len(x), len(z)), np.inf)
+
+    for r, item in enumerate(x):
+        cr = c[0:r+d_array[i]+1]
+        for col, val in enumerate(cr):
+            ct[r,col] = hx[r] + cr[col] + minimos[r + d_array[i] - z[col]]
+
+    minimos_i = np.min(ct, axis=1)
+    z_opt = np.argmin(ct, axis=1)
+
+    return minimos_i, z_opt
+
+def final_step(d, k, h, minimos):
+
+    x = 0
+    hx = h * x
+    z = np.arange(d + 1)
+
+    c = np.array(list([coste(i, k) for i in z]))
+    ct = np.full_like(z, np.inf)
+
+    for i in range(len(z)):
+
+        ct[i] = hx + c[i] + minimos[d-z[i]]
+
+    minimos_f = np.min(ct)
+    z_opt_f = np.argmin(ct)
+
+    return(minimos_f, z_opt_f)
+
 if __name__ == '__main__':
-    no_setup_eoq()
+    d = [3,2,4]
+    k = [3,7,6]
+    h = [1,3,2]
+    eoq_setup(1, d, k, h)
