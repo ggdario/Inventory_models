@@ -101,6 +101,62 @@ def eoq_setup(x_ini, d_array, k_arr, h_arr):
 
     print(f'Las cantidades optimas son {z_optimos}, con un coste de {minf}')
 
+
+def eoq_setup_simple(d_arr, k_arr, h_arr):
+
+    minimos1, z1, x1 = step_1_simple(d_arr, k_arr[0], h_arr[0])
+
+    xs = []
+    mins = []
+    zs = []
+    mins.append(minimos1)
+    zs.append(z1)
+    xs.append(x1)
+    min_ant = minimos1.copy()
+
+    for i in range(1, len(d_arr)-1):
+
+        mini, zi, xi = step_gral_simple(d_arr, k_arr[i], h_arr[i], min_ant, i)
+        mins.append(mini)
+        zs.append(zi)
+        xs.append(xi)
+        min_ant = mini.copy()
+
+    minf, zf, xf = final_step_simple(d_arr[-1], k_arr[-1], h_arr[-1], mini)
+    mins.append(minf)
+    zs.append(np.array([zf]))
+    xs.append(np.array(xf))
+    zs_finales = get_results_simple(zs, xs, d_arr)
+
+    print(f'Las cantidades óptimas son {zs_finales} con un coste total de {minf}')
+
+def get_results_simple(zs, x_arr, d_arr):
+
+
+    zs_r = list(reversed(zs))
+    zs_finales = []
+
+    x_r = list(reversed(x_arr))
+    d_r = list(reversed(d_arr))
+    x = 0
+    for i in range(len(zs_r)):
+
+        if x == 0:
+            zs_finales.append(zs_r[i][0])
+            if zs_r[i][0] != 0:
+                x = 0
+            else:
+                x = d_r[i]
+        else:
+            z = zs_r[i][np.where(x_r[i] == x)][0]
+            zs_finales.append(z)
+            if z != 0:
+                x = 0
+            else:
+                x = d_r[i]
+    return list(reversed(zs_finales))
+
+
 def get_results(zs, d_arr):
 
 
@@ -120,12 +176,17 @@ def get_results(zs, d_arr):
     return list(reversed(z_finales))
 def coste(z, k):
 
+    # if z == 0:
+    #     c = 0
+    # elif z <= 3:
+    #     c = 10*z + k
+    # else:
+    #     c = 30 + 20*(z-3) + k
+    # return c
     if z == 0:
         c = 0
-    elif z <= 3:
-        c = 10*z + k
     else:
-        c = 30 + 20*(z-3) + k
+        c = 2*z + k
     return c
 
 def step_1(x_ini, d_array, k, h):
@@ -140,6 +201,19 @@ def step_1(x_ini, d_array, k, h):
     minimos1 = ct.copy()
 
     return(minimos1, z)
+
+def step_1_simple(d_array, k, h):
+
+    x2 = np.cumsum(d_array[1:])
+    x = np.insert(x2, 0, 0)
+    hx = h * x
+    z = x + d_array[0]
+
+    c = np.array(list([coste(i, k) for i in z]))
+    ct = c + hx
+
+    minimos1 = ct.copy()
+    return(minimos1, z, x)
 
 def step_gral(d_array, k, h, minimos, i):
 
@@ -160,6 +234,30 @@ def step_gral(d_array, k, h, minimos, i):
 
     return minimos_i, z_opt
 
+
+def step_gral_simple(d_array, k, h, minimos, i):
+    x2 = np.cumsum(d_array[i+1:])
+    x = np.insert(x2, 0, 0)
+    hx = h * x
+    z2 = x + d_array[i]
+    z = np.insert(z2, 0, 0)
+    c = np.array(list([coste(i, k) for i in z]))
+
+    ct = np.full((len(x), len(z)), np.inf)
+
+    for r, item in enumerate(x):
+        cr = c[0:r+d_array[i]+1]
+        for col, val in enumerate(cr):
+            if col == 0:
+                ct[r, col] = hx[r] + minimos[r+1]
+            elif col == r +1 :
+                ct[r,col] = cr[col] + hx[r] + minimos[0]
+            else:
+                pass
+    minimos_i = np.min(ct, axis=1)
+    z_opt = z[np.argmin(ct, axis=1)]
+    return minimos_i, z_opt, x
+
 def final_step(d, k, h, minimos):
 
     x = 0
@@ -178,8 +276,27 @@ def final_step(d, k, h, minimos):
 
     return(minimos_f, z_opt_f)
 
+
+def final_step_simple(d, k, h, minimos):
+
+    x = 0
+    hx = h * x
+    z = np.array([0, d])
+
+    c = np.array(list([coste(i, k) for i in z]))
+    ct = np.full_like(z, np.inf)
+
+    for i in range(len(z)):
+
+        ct[i] = hx + c[i] + np.flip(minimos)[i]
+
+    minimos_f = np.min(ct)
+    z_opt_f = z[np.argmin(ct)]
+
+    return(minimos_f, z_opt_f, x)
+
 if __name__ == '__main__':
-    d = [3,2,4]
-    k = [3,7,6]
-    h = [1,3,2]
-    eoq_setup(1, d, k, h)
+    d = [61, 26, 90, 67]
+    k = [98, 114, 185, 70]
+    h = [1, 1, 1, 1]
+    eoq_setup_simple(d, k, h)
