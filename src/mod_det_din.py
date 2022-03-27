@@ -3,10 +3,20 @@ from pulp import *
 
 
 def no_setup_eoq():
+    """
+    Resolución del problema de transporte
+    En esta primera versión se cambian los datos dentro de la
+    propia función, ya que esta no tiene argumentos. En un futuro se
+    sacarán los datos fuera.
+    Returns
+    -------
 
+    """
+    # Etiquetas de los orígenes y destinos
     orig = ["R1", "O1", "R2", "O2", "R3", "O3", "R4", "O4"]
     dest = ["1", "2", "3", "4", "E"]
 
+    # Capacidad de producción de los orígenes
     o_dict = {
         "R1": 90,
         "O1": 50,
@@ -18,6 +28,7 @@ def no_setup_eoq():
         "O4": 70,
     }
 
+    # Demanda de los destinos
     d_dict = {
         "1": 100,
         "2": 190,
@@ -26,58 +37,74 @@ def no_setup_eoq():
         "E": 20,
     }
 
-    costs = [  # Bars
+    # Costes origen-destino
+    costs = [
         # 1 2 3 4 E
-        [6, 6.1, 6.2, 6.3, 0],  # R1
-        [9, 9.1, 9.2, 9.3, 0],  # O1
-        [100000, 6, 6.1, 6.2, 0],  # R2
-        [100000, 9, 9.1, 9.2, 0],  # O2
-        [100000, 100000, 6, 6.1, 0],  # R3
-        [100000, 100000, 9, 9.1, 0],  # O3
-        [100000, 100000, 100000, 6, 0],  # R4
-        [100000, 100000, 100000, 9, 0],  # O4
+        [6, 1.05*6.1, 1.05*6.2, 1.05*6.3, 0],  # R1
+        [9, 1.05*9.1, 1.05*9.2, 1.05*9.3, 0],  # O1
+        [100000e10, 1.05*6, 1.05*6.1, 1.05*6.2, 0],  # R2
+        [100000e10, 1.05*9, 1.05*9.1, 1.05*9.2, 0],  # O2
+        [100000e10, 100000e10, 1.05*6, 1.05*6.1, 0],  # R3
+        [100000e10, 100000e10, 1.05*9, 1.05*9.1, 0],  # O3
+        [100000e10, 100000e10, 100000e10, 1.05*6, 0],  # R4
+        [100000e10, 100000e10, 100000e10, 1.05*9, 0],  # O4
     ]
 
-    # The cost data is made into a dictionary
+    # Los costes van a un dictionario
     costs = makeDict([orig, dest], costs, 0)
 
-    # Creates the 'prob' variable to contain the problem data
+    # Se ponen los datos en una variable
     prob = LpProblem("EOQ_No_Setup", LpMinimize)
 
-    # Creates a list of tuples containing all the possible routes for transport
+    # Creación de todas las posibles rutas
     Routes = [(w, b) for w in orig for b in dest]
 
-    # A dictionary called 'Vars' is created to contain the referenced variables(the routes)
-    vars = LpVariable.dicts("Route", (orig, dest), 0, None, LpInteger)
+    # Diccionario con todas las rutas
+    vars = LpVariable.dicts("Ruta", (orig, dest), 0, None, LpInteger)
 
-    # The objective function is added to 'prob' first
-    prob += lpSum([vars[w][b] * costs[w][b] for (w, b) in Routes]), "Sum_of_Transporting_Costs"
+    # Se incluye la función objetivo
+    prob += lpSum([vars[w][b] * costs[w][b] for (w, b) in Routes]), "Suma_de_costes"
 
-    # The supply maximum constraints are added to prob for each supply node (warehouse)
+    # Máxima cantidad de reparto
     for w in orig:
-        prob += lpSum([vars[w][b] for b in dest]) <= o_dict[w], "Sum_of_Products_out_of_Warehouse_%s" % w
+        prob += lpSum([vars[w][b] for b in dest]) <= o_dict[w], "Suma_de_productos_duera_de_almacen_%s" % w
 
-    # The demand minimum constraints are added to prob for each demand node (bar)
+    # Restricciones de demanda
     for b in dest:
-        prob += lpSum([vars[w][b] for w in orig]) >= d_dict[b], "Sum_of_Products_into_Bar%s" % b
+        prob += lpSum([vars[w][b] for w in orig]) >= d_dict[b], "Suma_de_productos_a_destino%s" % b
 
-    # The problem data is written to an .lp file
-    prob.writeLP("BeerDistributionProblem.lp")
+    # Se escribe el problema en un fichero
+    prob.writeLP("Transporte.lp")
 
-    # The problem is solved using PuLP's choice of Solver
+    # Resolución del problema
     prob.solve()
 
-    # The status of the solution is printed to the screen
-    print("Status:", LpStatus[prob.status])
+    # Estado de la solución por pantalla
+    print("Estado:", LpStatus[prob.status])
 
-    # Each of the variables is printed with it's resolved optimum value
+    # Se escribe cada variable con su solucion
     for v in prob.variables():
         print(v.name, "=", v.varValue)
 
-    # The optimised objective function value is printed to the screen
-    print("Total Cost of Transportation = ", value(prob.objective))
+    # Coste total
+    print("Coste total = ", value(prob.objective))
 
 def eoq_setup(x_ini, d_array, k_arr, h_arr):
+    """
+    Modelo EOQ con coste de pedido
+    Parameters
+    ----------
+    x_ini: array con los valores iniciales de resolución
+    d_array: demandas iniciales
+    k_arr: coste de pedido
+    h_arr: coste de almacenaje
+
+    Returns
+    -------
+
+    """
+
+    # Aplicacion del paso 1 del algoritmo
     minimos1, z1 = step_1(x_ini, d_array, k_arr[0], h_arr[0])
 
     mins = []
@@ -86,6 +113,7 @@ def eoq_setup(x_ini, d_array, k_arr, h_arr):
     zs.append(z1)
     min_ant = minimos1.copy()
 
+    # Aplicación de pasos intermedios del algoritmo
     for i in range(1, len(d_array)-1):
 
         mini, zi = step_gral(d_array, k_arr[i], h_arr[i], min_ant, i)
@@ -93,6 +121,7 @@ def eoq_setup(x_ini, d_array, k_arr, h_arr):
         zs.append(zi)
         min_ant = mini.copy()
 
+    # Aplicacion del paso final
     minf, zf = final_step(d_array[-1], k_arr[-1], h_arr[-1], mini)
     mins.append(minf)
     zs.append(zf)
@@ -103,7 +132,20 @@ def eoq_setup(x_ini, d_array, k_arr, h_arr):
 
 
 def eoq_setup_simple(d_arr, k_arr, h_arr):
+    """
+    Modelo con coste de pedido simplificado bajo ciertas condiciones
+    de convexidad
+    Parameters
+    ----------
+    d_arr demandas (array)
+    k_arr coste de pedido (array)
+    h_arr coste de almacenaje (array)
 
+    Returns
+    -------
+
+    """
+    # Aplicación del paso inicial
     minimos1, z1, x1 = step_1_simple(d_arr, k_arr[0], h_arr[0])
 
     xs = []
@@ -114,6 +156,7 @@ def eoq_setup_simple(d_arr, k_arr, h_arr):
     xs.append(x1)
     min_ant = minimos1.copy()
 
+    # Aplicación de pasos intermedios
     for i in range(1, len(d_arr)-1):
 
         mini, zi, xi = step_gral_simple(d_arr, k_arr[i], h_arr[i], min_ant, i)
@@ -122,16 +165,31 @@ def eoq_setup_simple(d_arr, k_arr, h_arr):
         xs.append(xi)
         min_ant = mini.copy()
 
+    # Aplicación del paso final
     minf, zf, xf = final_step_simple(d_arr[-1], k_arr[-1], h_arr[-1], mini)
     mins.append(minf)
     zs.append(np.array([zf]))
     xs.append(np.array(xf))
     zs_finales = get_results_simple(zs, xs, d_arr)
 
+    # Se escriben los resultados por pantalla
     print(f'Las cantidades óptimas son {zs_finales} con un coste total de {minf}')
 
 def get_results_simple(zs, x_arr, d_arr):
+    """
+    Obtención de los resultados para el algoritmo EOQ simplificado
+    con coste de pedido. Básicamente es revertir la lista y ver
+    varias condiciones
+    Parameters
+    ----------
+    zs valores obtenidos
+    x_arr valores iniciales
+    d_arr demandas
 
+    Returns
+    -------
+
+    """
 
     zs_r = list(reversed(zs))
     zs_finales = []
@@ -158,7 +216,18 @@ def get_results_simple(zs, x_arr, d_arr):
 
 
 def get_results(zs, d_arr):
+    """
+    Obtención de resultados para el modelo EOQ con coste de pedido
+    no simplificado. Se hacen listas reversas.
+    Parameters
+    ----------
+    zs Valores de z calculados
+    d_arr demandas
 
+    Returns
+    -------
+
+    """
 
     zs = list(reversed(zs))
     d_arr = list(reversed(d_arr))
@@ -175,6 +244,18 @@ def get_results(zs, d_arr):
         xant = x
     return list(reversed(z_finales))
 def coste(z, k):
+    """
+    Función de coste auxiliar para algunos problemas.
+    Debe modificarse en función del problema analizado.
+    Parameters
+    ----------
+    z
+    k
+
+    Returns
+    -------
+
+    """
 
     # if z == 0:
     #     c = 0
@@ -190,7 +271,20 @@ def coste(z, k):
     return c
 
 def step_1(x_ini, d_array, k, h):
+    """
+    Paso 1 del algoritmo EOQ con coste de pedido
+    no simplificado
+    Parameters
+    ----------
+    x_ini valores iniciales
+    d_array demandas
+    k coste de pedido
+    h coste de almacenamiento
 
+    Returns
+    -------
+
+    """
     x = np.arange(sum(d_array[1:]) + 1)
     hx = h * x
     z = x + d_array[0] - x_ini
@@ -203,7 +297,19 @@ def step_1(x_ini, d_array, k, h):
     return(minimos1, z)
 
 def step_1_simple(d_array, k, h):
+    """
+    Paso 1 del algoritmo EOQ con coste de pedido
+    simplificado
+    Parameters
+    ----------
+    d_array demandas
+    k coste de pedido
+    h coste de almacenamiento
 
+    Returns
+    -------
+
+    """
     x2 = np.cumsum(d_array[1:])
     x = np.insert(x2, 0, 0)
     hx = h * x
@@ -216,7 +322,20 @@ def step_1_simple(d_array, k, h):
     return(minimos1, z, x)
 
 def step_gral(d_array, k, h, minimos, i):
+    """
+    Paso intermedio del algoritmo EOQ con coste de pedido
+    no simplificado
+    Parameters
+    ----------
+    d_array demandas
+    k coste de pedido
+    h coste de almacenamiento
+    minimos vector con los minimos anteriores
+    i paso en el que se encuentra
+    Returns
+    -------
 
+    """
     x = np.arange(sum(d_array[i+1:]) + 1)
     hx = h * x
     z = np.arange(max(x) + d_array[i] +1)
@@ -236,6 +355,20 @@ def step_gral(d_array, k, h, minimos, i):
 
 
 def step_gral_simple(d_array, k, h, minimos, i):
+    """
+    Paso intermedio del algoritmo EOQ con coste de pedido
+    simplificado
+    Parameters
+    ----------
+    d_array demandas
+    k coste de pedido
+    h coste de almacenamiento
+    minimos vector con los minimos anteriores
+    i paso en el que se encuentra
+    Returns
+    -------
+
+    """
     x2 = np.cumsum(d_array[i+1:])
     x = np.insert(x2, 0, 0)
     hx = h * x
@@ -259,7 +392,19 @@ def step_gral_simple(d_array, k, h, minimos, i):
     return minimos_i, z_opt, x
 
 def final_step(d, k, h, minimos):
+    """
+    Paso final del algoritmo EOQ con coste de pedido
+    no simplificado
+    Parameters
+    ----------
+    d demanda
+    k coste de pedido
+    h coste de almacenamiento
+    minimos vector con los minimos anteriores
+    Returns
+    -------
 
+    """
     x = 0
     hx = h * x
     z = np.arange(d + 1)
@@ -278,7 +423,19 @@ def final_step(d, k, h, minimos):
 
 
 def final_step_simple(d, k, h, minimos):
+    """
+    Paso final del algoritmo EOQ con coste de pedido
+    simplificado
+    Parameters
+    ----------
+    d demanda
+    k coste de pedido
+    h coste de almacenamiento
+    minimos vector con los minimos anteriores
+    Returns
+    -------
 
+    """
     x = 0
     hx = h * x
     z = np.array([0, d])
@@ -296,7 +453,7 @@ def final_step_simple(d, k, h, minimos):
     return(minimos_f, z_opt_f, x)
 
 if __name__ == '__main__':
-    d = [61, 26, 90, 67]
-    k = [98, 114, 185, 70]
-    h = [1, 1, 1, 1]
-    eoq_setup_simple(d, k, h)
+    # d = [61, 26, 90, 67]
+    # k = [98, 114, 185, 70]
+    # h = [1, 1, 1, 1]
+    no_setup_eoq()
